@@ -1,0 +1,211 @@
+/// Ion PEG Language Specification ///
+/// ------------------------------ ///
+
+WHITESPACE = {" " | "\t"}
+alpha      = _{ 'a'..'z' | 'A'..'Z' | "_"| "-" }
+digit      = _{ '0'..'9' }
+Escape     = {"\\" ~ ANY}
+Comment    = { "#"* ~ ANY* ~ "\n" }
+Special = {"@"|"$"|"#"|Sep}
+
+// Keyword definitions
+KeyWord = _{ End
+           | Let
+           | Match | Case
+           | If | ElseIf | Else
+	   | And | Or
+           | For | In
+           | While
+	   | Break | Continue
+           | Fn }
+  End      = { "end" }
+  Let      = { "let" }
+  Match    = { "match" }
+  Case     = { "case" }
+  If       = { "if" }
+  Else     = { "else" }
+  ElseIf   = { "else if" }
+  And      = { "and" | "&&" }
+  Or       = { "or" | "||" }
+  For      = { "for" }
+  In       = { "in" }
+  While    = { "while" }
+  Break    = { "break" }
+  Continue = { "continue" }
+  Fn       = { "fn" }
+
+Sep = { ";" | "\n" | "&&" }
+Ident = ${ !KeyWord ~ alpha+ ~ (alpha|digit)* }
+
+// Variable definitions
+// ---------------------------
+// A variable is defined as an identifier and an optional colon `:` separated
+// variable type, that can be either a primitive or array-like type.
+//
+Variable = ${ Ident ~ (":" ~ Type)? }
+  Type = { ArrayLike | Primitive  }
+    Primitive = { "bool" | "int"| "float" | "str" }
+    ArrayLike = ${ Primitive~"[]" | "[]" | "hmap[]" | "bmap[]" }
+
+Variables = { Variable+ }
+
+// Range operators
+// ---------------------------
+// Ion supports inclusive `...` or `..=` and exclusive `..` range operators,
+// with optional step size. The step size follows the range start by `..STEP` format.
+//
+// Example:
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// for i in 10..-2...-2
+//    echo $i
+// end
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+//
+RangeOp = _{ (RangeIn | RangeEx) }
+  RangeIn = { ("..." | "..=") }
+  RangeEx = { ".." }
+RangeVal  = ${ LitInt | (Sign? ~ Eval) }
+RangeStep = ${ ".." ~ RangeVal }
+//The parser doesn't go back within a group if the parse succeeds,
+//so requiring RangeOp for a step to count makes it work.
+Range = ${ RangeVal ~ ((RangeStep ~ RangeOp)|RangeOp) ~ RangeVal }
+
+// Subshell syntax
+//
+// @( ) - Array subshell call, collects stdio into ion array
+// $( ) - Normal subshell call, collects stdio into string
+Subshell = _{ArraySubshell | NormalSubshell}
+  ArraySubshell  = {"@(" ~ Expression ~ ")"}
+  NormalSubshell = {"$(" ~ Expression ~ ")"}
+
+Expression = {Subshell | Eval | Literal}
+// TODO: glob, proc, brace (braces don't expand inside strings)
+//
+// glob: *, ?,
+// proc: $(), @()
+// brace: {word1,word1}
+Eval = _{ ArrayEval | VarEval | StringEval}
+  StringEval = ${"\""~ (Escape|Eval|(!"\""~ANY))*~ "\""}
+  ArrayEval  = ${ "@" ~ Ident | "@{" ~ Ident ~ "}" }
+  VarEval    = ${ "$" ~ Ident | "${" ~ Ident ~ "}" }
+
+path_mem   = _{ alpha | digit | "\\ " |"."}
+Path = ${( ("~/"|"./"|"/") ~ (path_mem+ ~ "/")* ~"/"? )}
+
+// Helpers for parsing literals
+// ----------------------------
+//
+Sign = _{ SignNeg | SignPlus }
+  SignPlus = { "+" | "" }
+  SignNeg  = { "-" }
+
+FloatFrac = { digit }
+FloatSep = { "." }
+
+Literal = _{ LitFloat
+           | LitInt
+           | LitBool
+           | LitStr
+           | LitArrayLike
+           | LitUntyped
+           }
+  LitInt     = ${ Sign ~ digit+ }
+  LitFloat   = ${ Sign ~ (digit* ~ FloatSep ~ FloatFrac+
+                         | digit+ ~ FloatSep ~ FloatFrac*) }
+  LitBool    = ${ "false" | "true" }
+  // TODO: DQUOTE str shouldn't be ANY, see StringEval
+  LitStr     = ${ ("\"" ~ ANY* ~ "\"" | "'" ~ ANY* ~ "'") }
+  LitUntyped = ${ (!Special ~ !WHITESPACE ~ (ANY|Escape))+ }
+
+// TODO: lit map, probably untyped
+  LitArrayLike = _{ LitMap | LitArray | UntypedArray }
+    LitArray     = _{ RangeArray | FloatArray | IntArray }
+      // XXX: not supported right now?
+      RangeArray = { "[" ~ Range ~ "]" }
+      FloatArray = { "["~ LitFloat+ ~ "]" }
+      IntArray   = { "[" ~ LitInt+ ~ "]" }
+    LitMap       = {"[" ~ "]"}
+    UntypedArray = { "[" ~ ANY* ~ "]" }
+
+
+
+// Assignemnt operations
+// ---------------------------
+// Ion assignments are done via `let` statements. The assigned value
+// if unquoted and contains whitespace assumed to be string, unless
+// the LHS pattern matches
+//
+// For more on assignments read the `let` statement description.
+//
+// The aim here is to match the input value amount
+
+Assignment = { (Ident ~ Assign ~ Expression)
+                | (Ident ~ Assignment ~ Expression)}
+
+Assign = {AsAssign|IncAssign|DecAssign|MulAssign|DivAssign}
+  AsAssign    = { "=" }
+  IncAssign = { "+=" }
+  DecAssign = { "-=" }
+  MulAssign = { "*=" }
+  DivAssign = { "/=" }
+
+// Statement definitions
+// TODO: add missing And, Or
+// Added command for calls to programs that don't need to return a result
+// at end becuase keywords should be checked first.
+Statement  = { StatementLet | Block |Path|( !KeyWord ~ StatementCmd )}
+Statements = { Statement ~ (Sep+ ~ Statement)* ~  Sep? }
+LoopBody   = { ((Break | Continue |Statement )~Sep+)+}
+Block      = _{ StatementFn
+              | StatementMatch
+              | StatementIf
+              | StatementFor
+              | StatementWhile }
+
+  StatementCmd = {Expression}
+
+  // Function syntax
+  //
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  // fn func x y:int z:[] -- descrption
+  //     # BODY
+  // end
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  // TODO: missing optional func description
+  StatementFn = { Fn ~ Ident ~ Variables? ~ Sep ~ Statements? ~ End }
+
+  // Let syntax
+  //
+  // Assignments are done via `let` statements, where `let` supports
+  // multiple value assignments, reassignments with mathematical operations
+  // and indexed assignments on array-like types.
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  // let x:float y:[] = 3.14 [3 1 4]
+  // let x += .86
+  // let y[0] = "hello"
+  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  // TODO: indexed assignment rule
+  // Assuming += work with multi assignment
+
+  StatementLet = { Let ~ Assignment }
+
+  StatementMatch = { Match ~ Eval ~ Sep ~ Cases ~ End }
+    Cases         = { StatementCase* }
+    StatementCase = { (Case ~ "_" | Case ~ Expression)
+                      ~ Sep ~ Statements? }
+
+  // TODO: `Predicate` + LogicOps
+  StatementIf = { If ~ Expression ~ Sep ~ Statements?
+                ~ StatementElseIf*
+                ~ StatementElse?
+                ~ End }
+    StatementElseIf = { ElseIf ~ Expression ~ Sep ~ Statements? }
+    StatementElse   = { Else ~ Sep ~ Statements? }
+
+  // TODO: do not use Ident
+  StatementFor = { For ~ Ident+ ~ In ~ Range ~ Sep ~ Statements? ~ End }
+
+  StatementWhile = { While ~ Eval ~ Sep ~ LoopBody? ~ End }
+
+/// Parse script ///
+Main = { SOI ~ Statements? ~ EOI }

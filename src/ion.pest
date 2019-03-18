@@ -1,23 +1,28 @@
-/// Ion PEG Language Specification ///
-/// ------------------------------ ///
+WHITESPACE = _{ " " | "\n" }
+Char = _{ 'a'..'z' | 'A'..'Z' | "_" }
+Digit = _{ '0'..'9' }
+Escaped = { "\\" ~ ANY }
 
-WHITESPACE = {" " | "\t"}
-alpha      = _{ 'a'..'z' | 'A'..'Z' | "_"| "-" }
-digit      = _{ '0'..'9' }
-Escape     = {"\\" ~ ANY}
-Comment    = { "#"* ~ ANY* ~ "\n" }
-Special = {"@"|"$"|"#"|Sep}
+// Variables can contain/start with '_' and/or ASCII characters
+Ident = ${ !Keyword ~ Char+ ~ (Char | Digit)* }
 
-// Keyword definitions
-KeyWord = _{ End
+// Line starting with '#' counts as comment until the end of the line
+Comment = _{ "#"+ ~ ANY* }
+
+// Statements separated by either ';' or '\n'
+Sep = { SemiColon | NewLine }
+  SemiColon = { ";" }
+  NewLine   = { "\n" }
+
+Keyword = _{ End
            | Let
-           | Match | Case
-           | If | ElseIf | Else
+	   | Match | Case
+	   | If | ElseIf | Else
 	   | And | Or
-           | For | In
-           | While
+	   | For | In
+	   | While
 	   | Break | Continue
-           | Fn }
+	   | Fn }
   End      = { "end" }
   Let      = { "let" }
   Match    = { "match" }
@@ -34,33 +39,54 @@ KeyWord = _{ End
   Continue = { "continue" }
   Fn       = { "fn" }
 
-Sep = { ";" | "\n" | "&&" }
-Ident = ${ !KeyWord ~ alpha+ ~ (alpha|digit)* }
+// Literal parsing
+Sign = _{ SignNeg | SignPlus }
+  SignPlus = _{ "+" | "" }
+  SignNeg  = _{ "-" }
 
-// Variable definitions
-// ---------------------------
-// A variable is defined as an identifier and an optional colon `:` separated
-// variable type, that can be either a primitive or array-like type.
-//
-Variable = ${ Ident ~ (":" ~ Type)? }
-  Type = { ArrayLike | Primitive  }
-    Primitive = { "bool" | "int"| "float" | "str" }
-    ArrayLike = ${ Primitive~"[]" | "[]" | "hmap[]" | "bmap[]" }
+FloatHead = _{ Digit }
+FloatFrac = _{ Digit }
+FloatSep = _{ "." }
 
-Variables = { Variable+ }
+Literal = _{ LitFloat
+           | LitInt
+	   | LitBool
+	   | LitStr
+	   | LitArray
+	   | LitMap
+	   | Atom }
+  LitFloat = ${ Sign ~ ( FloatHead* ~ FloatSep ~ FloatFrac+
+                       | FloatHead+ ~ FloatSep ~ FloatFrac*) }
+  LitInt = ${ Sign ~ Digit+ }
+  LitBool = { False | True }
+    False = _{ "false" }
+    True  = _{ "true" }
+  // TODO: fix string literals
+  LitStr = _{ LitSQuoteStr
+	    | LitDQuoteStr
+	    | LitEvalStr }
+    LitSQuoteStr = { SQuote ~ (Escaped | !SQuote ~ ANY)* ~ SQuote }
+    LitDQuoteStr = { DQuote ~ (Escaped | !(DQuote | EvalOp) ~ ANY)* ~ DQuote }
+    LitEvalStr   = { DQuote ~ ( Eval
+			      | Method
+			      | SubShell
+			      | Escaped
+			      | !DQuote ~ ANY )* ~ DQuote }
+  LitArray = _{ LitRangeArray
+              | LitFloatArray
+	      | LitIntArray
+	      | LitAnyArray }
+    // XXX: not supported right now?
+    LitRangeArray = { "[" ~ Range ~ "]" }
+    LitFloatArray = { "[" ~ LitFloat+ ~ "]" }
+    LitIntArray   = { "[" ~ LitInt+ ~ "]" }
+    LitAnyArray   = { "[" ~ Literal* ~ "]" }
+  LitMap = { "[" ~ LitMapPair+ ~ "]" }
+    LitMapPair = ${ LitMapKey ~ "=" ~ LitMapValue }
+      LitMapKey   = { Expression }
+      LitMapValue = { Expression }
 
-// Range operators
-// ---------------------------
-// Ion supports inclusive `...` or `..=` and exclusive `..` range operators,
-// with optional step size. The step size follows the range start by `..STEP` format.
-//
-// Example:
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// for i in 10..-2...-2
-//    echo $i
-// end
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~
-//
+// Range syntax
 RangeOp = _{ (RangeIn | RangeEx) }
   RangeIn = { ("..." | "..=") }
   RangeEx = { ".." }
@@ -71,134 +97,90 @@ RangeStep = ${ ".." ~ RangeVal }
 Range = ${ RangeVal ~ ((RangeStep ~ RangeOp)|RangeOp) ~ RangeVal }
 
 
-Expression = {Eval | Literal}
-// TODO: glob, proc, brace (braces don't expand inside strings)
-//
-// glob: *, ?,
-// proc: $(), @()
-// brace: {word1,word1}
-Eval = _{ ArrayEval | VarEval | StringEval}
-  StringEval = ${"\""~ (Escape|Eval|(!"\""~ANY))*~ "\""}
-  ArrayEval  = ${ "@" ~ Ident | "@{" ~ Ident ~ "}" }
-  VarEval    = ${ "$" ~ Ident | "${" ~ Ident ~ "}" }
-  
-path_mem   = _{ alpha | digit | "\\ " |"."}
-Path = ${( ("~/"|"./"|"/") ~ (path_mem+ ~ "/")* ~"/"? )}
+// redirect operators
+// >
+// <
+// |
+// &>
 
-// Helpers for parsing literals
-// ----------------------------
-//
-Sign = _{ SignNeg | SignPlus }
-  SignPlus = { "+" | "" }
-  SignNeg  = { "-" }
+SubShell = _{ Shell | ArrayShell }
+  Shell      = _{"$(" ~ ")"}
+  ArrayShell = _{"@(" ~ ")"}
 
-FloatFrac = { digit }
-FloatSep = { "." }
+// Variable syntax consist of variable name with optional ':' separated type
+// specifier, example would be 'varname:type'.
 
-Literal = _{ LitFloat
-           | LitInt
-           | LitBool
-           | LitStr
-           | LitArrayLike
-           | LitUntyped
-           }
-  LitInt     = ${ Sign ~ digit+ }
-  LitFloat   = ${ Sign ~ (digit* ~ FloatSep ~ FloatFrac+
-                         | digit+ ~ FloatSep ~ FloatFrac*) }
-  LitBool    = ${ "false" | "true" }
-  // TODO: DQUOTE str shouldn't be ANY, see StringEval
-  LitStr     = ${ ("\"" ~ ANY* ~ "\"" | "'" ~ ANY* ~ "'") }
-  LitUntyped = ${ (!Special ~ !WHITESPACE ~ (ANY|Escape))+ }
+Variable = _{ Ident ~ (":" ~ Type)? }
+  Type = _{ Primitive | AnyArray | TypedArray | Map }
+    Primitive = _{ Bool | Int | Float | Str }
+      Bool  = { "bool" }
+      Int   = { "int" }
+      Float = { "float" }
+      Str   = { "str" }
+    TypedArray = { "[" ~ Type ~ "]" }
+    AnyArray = { "[]" }
+    Map = _{ BMap | HMap }
+      BMap = ${ "bmap" ~ TypedArray }
+      HMap = ${ "hmap" ~ TypedArray }
 
-// TODO: lit map, probably untyped
-  LitArrayLike = _{ LitMap | LitArray | UntypedArray }
-    LitArray     = _{ RangeArray | FloatArray | IntArray }
-      // XXX: not supported right now?
-      RangeArray = { "[" ~ Range ~ "]" }
-      FloatArray = { "["~ LitFloat+ ~ "]" }
-      IntArray   = { "[" ~ LitInt+ ~ "]" }
-    LitMap       = {"[" ~ "]"}
-    UntypedArray = { "[" ~ ANY* ~ "]" }
+// Multiple variable bindings can be declared on the same line, where
+// each 'varname:type' is whitespace separated
+Variables = { Variable ~ Variable* }
 
+// Assignment
+AssignOp = _{ Assign
+            | IncAssign
+	    | DecAssign
+	    | MulAssign
+	    | DivAssign
+	    | ConcatAssing }
+  Assign       = { "=" }
+  IncAssign    = { "+=" }
+  DecAssign    = { "-=" }
+  MulAssign    = { "*=" }
+  DivAssign    = { "/=" }
+  ConcatAssing = { "++=" }
 
+EvalOp = _{ ArrEvalOp | StrEvalOp }
+  ArrEvalOp = _{ "@" }
+  StrEvalOp = _{ "$" }
 
-// Assignemnt operations
-// ---------------------------
-// Ion assignments are done via `let` statements. The assigned value
-// if unquoted and contains whitespace assumed to be string, unless
-// the LHS pattern matches
-//
-// For more on assignments read the `let` statement description.
-//
-// The aim here is to match the input value amount
+Quote = _{ SQuote | DQuote }
+  SQuote = { "'" }
+  DQuote = { "\"" }
 
-Assignment = { (Ident ~ Assign ~ Expression)
-                | (Ident ~ Assignment ~ Expression)}
+Parent = _{ "(" | ")" }
+Brace  = _{ "{" | "}" }
+Bracket = _{ "[" | "]" }
 
-Assign = {AsAssign|IncAssign|DecAssign|MulAssign|DivAssign}
-  AsAssign    = { "=" }
-  IncAssign = { "+=" }
-  DecAssign = { "-=" }
-  MulAssign = { "*=" }
-  DivAssign = { "/=" }
+Atom = ${ ( !Keyword
+          ~ !EvalOp
+	  ~ !WHITESPACE
+	  ~ !Quote
+	  ~ !Parent
+	  ~ !Brace
+	  ~ !Bracket
+	  ~ ANY)+ }
 
-// Statement definitions
-// TODO: add missing And, Or
-// Added command for calls to programs that don't need to return a result
-// at end becuase keywords should be checked first.
-Statement  = { StatementLet | Block |Path|( !KeyWord ~ StatementCmd )}
-Statements = { Statement ~ (Sep+ ~ Statement)* ~  Sep? }
-LoopBody   = { ((Break | Continue |Statement )~Sep+)+}
-Block      = _{ StatementFn
-              | StatementMatch
-              | StatementIf
-              | StatementFor
-              | StatementWhile }
+Eval = _{ StrEval | ArrEval }
+  StrEval = ${ StrEvalOp ~ Ident }
+  ArrEval = ${ ArrEvalOp ~ Ident }
 
-  StatementCmd = {Ident~Expression+}
+// XXX: Assuming methods have at least one argument
+Method = _{ StrMethod | ArrMethod }
+  StrMethod = ${ StrEvalOp ~ Ident ~ "(" ~ MethodArgs ~ ")" }
+  ArrMethod = ${ ArrEvalOp ~ Ident ~ "(" ~ MethodArgs ~ ")" }
+    MethodArgs = _{ Expression ~ (WHITESPACE ~ Expression)* }
 
-  // Function syntax
-  //
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // fn func x y:int z:[] -- descrption
-  //     # BODY
-  // end
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // TODO: missing optional func description
-  StatementFn = { Fn ~ Ident ~ Variables? ~ Sep ~ Statements? ~ End }
+Expression = _{ Literal
+	      | Atom
+	      | Method
+              | Eval
+	      | SubShell }
 
-  // Let syntax
-  //
-  // Assignments are done via `let` statements, where `let` supports
-  // multiple value assignments, reassignments with mathematical operations
-  // and indexed assignments on array-like types.
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // let x:float y:[] = 3.14 [3 1 4]
-  // let x += .86
-  // let y[0] = "hello"
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // TODO: indexed assignment rule
-  // Assuming += work with multi assignment
+LetExpression = { Let ~ Variables ~ AssignOp ~ Expression }
 
-  StatementLet = { Let ~ Assignment }
+Expressions = _{ LetExpression ~ Sep? }
 
-  StatementMatch = { Match ~ Eval ~ Sep ~ Cases ~ End }
-    Cases         = { StatementCase* }
-    StatementCase = { (Case ~ "_" | Case ~ Expression)
-                      ~ Sep ~ Statements? }
-
-  // TODO: `Predicate` + LogicOps
-  StatementIf = { If ~ Expression ~ Sep ~ Statements?
-                ~ StatementElseIf*
-                ~ StatementElse?
-                ~ End }
-    StatementElseIf = { ElseIf ~ Expression ~ Sep ~ Statements? }
-    StatementElse   = { Else ~ Sep ~ Statements? }
-
-  // TODO: do not use Ident
-  StatementFor = { For ~ Ident+ ~ In ~ Range ~ Sep ~ Statements? ~ End }
-
-  StatementWhile = { While ~ Eval ~ Sep ~ LoopBody? ~ End }
-
-/// Parse script ///
-Main = { SOI ~ Statements? ~ EOI }
+Input = { Comment | Expressions }
+Main = { SOI ~ LetExpression ~ Sep? ~ EOI }

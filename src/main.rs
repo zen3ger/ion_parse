@@ -15,10 +15,10 @@ fn main() {
     .get_matches();
 
     let rule = match cp.value_of("rule").unwrap_or("Main") {
-        "Range" => Rule::Range,
-        "Statement" => Rule::Statement,
-        "Statements" => Rule::Statements,
-        "Path" => Rule::Path,
+//        "Range" => Rule::Range,
+//        "Statement" => Rule::Statement,
+//        "Statements" => Rule::Statements,
+//        "Path" => Rule::Path,
 
         _ => Rule::Main,
     };
@@ -31,7 +31,7 @@ fn main() {
     loop {
         stdin.read_line(&mut buf).ok();
         match pesto::Command::parse(rule, &buf) {
-            Ok(res) => println!("res = {:?}", res),
+            Ok(res) => println!("{}", res),
             Err(e) => println!("{}", e),
         }
         buf.truncate(0);
