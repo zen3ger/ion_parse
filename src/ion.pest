@@ -159,6 +159,7 @@ Atom = ${ ( !Keyword
 	  ~ !Parent
 	  ~ !Brace
 	  ~ !Bracket
+	  ~ !Sep
 	  ~ ANY)+ }
 
 Eval = _{ StrEval | ArrEval }
@@ -177,7 +178,7 @@ Expression = _{ Literal
               | Eval
 	      | SubShell }
 
-StatementLet = { Let ~ Variables ~ AssignOp ~ Expression }
+StatementLet = { Let ~ Variables ~ AssignOp ~ Expression+ }
 
 Statements = _{ StatementLet }
 Expressions = _{ Expression* }
