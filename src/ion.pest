@@ -40,9 +40,10 @@ Keyword = _{ End
   Fn       = { "fn" }
 
 // Literal parsing
+// XXX: Do we need explicit signs or can be hiden with `_{}` matchin?
 Sign = _{ SignNeg | SignPlus }
-  SignPlus = _{ "+" | "" }
-  SignNeg  = _{ "-" }
+  SignPlus = ${ "+" | "" }
+  SignNeg  = ${ "-" }
 
 FloatHead = _{ Digit }
 FloatFrac = _{ Digit }
@@ -90,11 +91,9 @@ Literal = _{ LitFloat
 RangeOp = _{ (RangeIn | RangeEx) }
   RangeIn = { ("..." | "..=") }
   RangeEx = { ".." }
-RangeVal  = ${ LitInt | (Sign? ~ Eval) }
+RangeVal  = _{ LitInt | (Sign? ~ (Method | Eval | SubShell)) }
 RangeStep = ${ ".." ~ RangeVal }
-//The parser doesn't go back within a group if the parse succeeds,
-//so requiring RangeOp for a step to count makes it work.
-Range = ${ RangeVal ~ ((RangeStep ~ RangeOp)|RangeOp) ~ RangeVal }
+Range = ${ RangeVal ~ (RangeStep)? ~ RangeOp ~ RangeVal }
 
 
 // redirect operators
