@@ -104,8 +104,8 @@ Range = ${ RangeVal ~ ((RangeStep ~ RangeOp)|RangeOp) ~ RangeVal }
 // &>
 
 SubShell = _{ Shell | ArrayShell }
-  Shell      = _{"$(" ~ ")"}
-  ArrayShell = _{"@(" ~ ")"}
+  Shell      = {"$(" ~ Expression* ~ ")"}
+  ArrayShell = {"@(" ~ Expression* ~ ")"}
 
 // Variable syntax consist of variable name with optional ':' separated type
 // specifier, example would be 'varname:type'.
@@ -183,4 +183,4 @@ LetExpression = { Let ~ Variables ~ AssignOp ~ Expression }
 Expressions = _{ LetExpression ~ Sep? }
 
 Input = { Comment | Expressions }
-Main = { SOI ~ LetExpression ~ Sep? ~ EOI }
+Main = { SOI ~ SubShell ~ Sep? ~ EOI }
