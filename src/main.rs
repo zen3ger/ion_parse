@@ -41,11 +41,16 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pest::iterators::Pair;
+    use pest::error::{Error, ErrorVariant};
 
     #[test]
     fn range_pass() {
-            // Ranges can have optional steps, and integers can be replaces with
-            // anything that starts with `EvalOp`
+        // Ranges have a fix start and end value and an optional step.
+        // The step can be an integer or anything that expands to a value
+        // that can be parsed into an integer.
+        // Start and end values can be single characters or anything that
+        // expands to an integer or character.
         let tests = vec![
             (Rule::Range, "1..2..10"),
             (Rule::Range, "-1..-2..-10"),
@@ -55,6 +60,11 @@ mod tests {
             (Rule::Range, "-1..-10"),
             (Rule::Range, "1...10"),
             (Rule::Range, "1..=10"),
+            (Rule::Range, "a...z"),
+            (Rule::Range, "a..2..z"),
+            (Rule::Range, "a..=z"),
+            (Rule::Range, "'a'..\"A\""),
+            (Rule::Range, "A..3...Z"),
             (Rule::Range, "$start..$step..$fin"),
             (Rule::Range, "@start..@step...@fin"),
             (Rule::Range, "$method($x $y)..@method(@arr)...$method(@method())"),
@@ -63,6 +73,20 @@ mod tests {
 
         let mut errs = Vec::new();
         for (index, (rule, input)) in tests.iter().enumerate() {
+            match pesto::Command::parse(*rule, &input) {
+                Err(err) => errs.push((index, input, err)),
+                Ok(passed) => {
+                    let span = passed.clone().next().unwrap().as_span();
+                    if span.end() != input.len() {
+                        let err = Error::new_from_span(
+                            ErrorVariant::CustomError { message: "partial match".into() },
+                            span
+                        );
+                        // partial match, should be considered as an error
+                        errs.push((index, input, err));
+                    }
+                }
+            }
             if let Err(err) = pesto::Command::parse(*rule, &input) {
                 errs.push((index, input, err));
             }
@@ -75,7 +99,38 @@ mod tests {
             }
             panic!();
         }
-        
+    }
+
+    #[test]
+    fn range_fail() {
+        let tests = vec![
+            (Rule::Range, "1a..1"),
+            (Rule::Range, "'aaa'..'bbb'"),
+            (Rule::Range, "1..z...4"),
+            (Rule::Range, "1...z..4"),
+            (Rule::Range, "1.."),
+            (Rule::Range, "1..ccc"),
+        ];
+
+        let mut errs = Vec::new();
+        for (index, (rule, input)) in tests.iter().enumerate() {
+            if let Ok(passed) = pesto::Command::parse(*rule, &input) {
+                let span = passed.clone().next().unwrap().as_span();
+                if span.end() == input.len() {
+                    // Partial matches can happen, but they count as failure,
+                    // complete parsing catches it whit `~ EOI`
+                    errs.push((index, input, passed));
+                }
+            }
+        }
+
+        if errs.len() > 0 {
+            for (index, input, passed) in errs {
+                println!("[{}] {}", index, input);
+                println!("{}\n", passed);
+            }
+            panic!();
+        }
     }
 
     #[test]

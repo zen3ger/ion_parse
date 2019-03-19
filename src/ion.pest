@@ -1,10 +1,10 @@
 WHITESPACE = _{ " " | "\n" }
-Char = _{ 'a'..'z' | 'A'..'Z' | "_" }
+Char = _{ 'a'..'z' | 'A'..'Z' }
 Digit = _{ '0'..'9' }
 Escaped = { "\\" ~ ANY }
 
 // Variables can contain/start with '_' and/or ASCII characters
-Ident = ${ !Keyword ~ Char+ ~ (Char | Digit)* }
+Ident = ${ !Keyword ~ (Char | "_")+ ~ (Char | "_" | Digit)* }
 
 // Line starting with '#' counts as comment until the end of the line
 Comment = _{ "#"+ ~ ANY* }
@@ -16,6 +16,7 @@ Sep = { SemiColon | NewLine }
 
 Keyword = _{ End
            | Let
+	   | Export
 	   | Match | Case
 	   | If | ElseIf | Else
 	   | And | Or
@@ -25,6 +26,7 @@ Keyword = _{ End
 	   | Fn }
   End      = { "end" }
   Let      = { "let" }
+  Export   = { "export" }
   Match    = { "match" }
   Case     = { "case" }
   If       = { "if" }
@@ -55,6 +57,7 @@ Literal = _{ LitFloat
 	   | LitStr
 	   | LitArray
 	   | LitMap
+	   | LitChar
 	   | Atom }
   LitFloat = ${ Sign ~ ( FloatHead* ~ FloatSep ~ FloatFrac+
                        | FloatHead+ ~ FloatSep ~ FloatFrac*) }
@@ -62,7 +65,7 @@ Literal = _{ LitFloat
   LitBool = { False | True }
     False = _{ "false" }
     True  = _{ "true" }
-  // TODO: fix string literals
+  LitChar = { (Quote ~ Char ~ Quote) | Char }
   LitStr = _{ LitSQuoteStr
 	    | LitDQuoteStr
 	    | LitEvalStr }
@@ -91,9 +94,9 @@ Literal = _{ LitFloat
 RangeOp = _{ (RangeIn | RangeEx) }
   RangeIn = { ("..." | "..=") }
   RangeEx = { ".." }
-RangeVal  = _{ LitInt | (Sign? ~ (Method | Eval | SubShell)) }
-RangeStep = ${ ".." ~ RangeVal }
-Range = ${ RangeVal ~ (RangeStep)? ~ RangeOp ~ RangeVal }
+RangeVal  = _{ LitInt | LitChar | (Sign? ~ (Method | Eval | SubShell)) }
+RangeStep = ${ ".." ~ (LitInt | (Sign? ~ (Method | Eval | SubShell))) }
+Range = { RangeVal ~ (RangeStep ~ RangeOp | RangeOp) ~ RangeVal }
 
 
 // redirect operators
