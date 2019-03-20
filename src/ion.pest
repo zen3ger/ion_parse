@@ -57,7 +57,6 @@ Literal = _{ LitFloat
 	   | LitStr
 	   | LitArray
 	   | LitMap
-	   | LitChar
 	   | Atom }
   LitFloat = ${ Sign ~ ( FloatHead* ~ FloatSep ~ FloatFrac+
                        | FloatHead+ ~ FloatSep ~ FloatFrac*) }
@@ -65,6 +64,8 @@ Literal = _{ LitFloat
   LitBool = { False | True }
     False = _{ "false" }
     True  = _{ "true" }
+  // XXX: LitChar should not be added to Literals directly, since they
+  // are just used in special casing Range
   LitChar = { (Quote ~ Char ~ Quote) | Char }
   LitStr = _{ LitSQuoteStr
 	    | LitDQuoteStr

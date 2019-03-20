@@ -41,7 +41,6 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pest::iterators::Pair;
     use pest::error::{Error, ErrorVariant};
 
     #[test]
@@ -67,7 +66,7 @@ mod tests {
             (Rule::Range, "A..3...Z"),
             (Rule::Range, "$start..$step..$fin"),
             (Rule::Range, "@start..@step...@fin"),
-            (Rule::Range, "$method($x $y)..@method(@arr)...$method(@method())"),
+            (Rule::Range, "$method($x $y)..@method(@arr)...$method(@method(arg))"),
             (Rule::Range, "$($x $y)..@(@arr)...$(atom @method('litStr'))"),
         ];
 
