@@ -9,7 +9,7 @@ fn main() {
     let cp = clap_app!(pegtest =>
     (version : crate_version!())
     (about : "Tests how pegs work")
-    (author : "Matthew Stoodley,Zen3Ger")
+    (author : "Matthew Stoodley, Roland Kovács (zen3ger)")
     (@arg rule: -r +takes_value "The rule to look for -- default Statement")
     )
     .get_matches();
