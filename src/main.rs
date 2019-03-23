@@ -65,9 +65,8 @@ mod tests {
             (Rule::Range, "'a'..\"A\""),
             (Rule::Range, "A..3...Z"),
             (Rule::Range, "$start..$step..$fin"),
-            (Rule::Range, "@start..@step...@fin"),
-            (Rule::Range, "$method($x $y)..@method(@arr)...$method(@method(arg))"),
-            (Rule::Range, "$($x $y)..@(@arr)...$(atom @method('litStr'))"),
+            (Rule::Range, "$method($x $y)..$method(@arr)...$method(@method(arg))"),
+            (Rule::Range, "$($x $y)..$(@arr)...$(atom @method('litStr'))"),
         ];
 
         let mut errs = Vec::new();
@@ -111,6 +110,12 @@ mod tests {
             (Rule::Range, "1...z..4"),
             (Rule::Range, "1.."),
             (Rule::Range, "1..ccc"),
+            // The most outside expansion cannot be array expansion since `start`..`step`..`fin`
+            // from which `step` has to expand to LitInt always, while `start` and `fin` can be
+            // either LitInt or LitChar.
+            (Rule::Range, "@start..@step...@fin"),
+            (Rule::Range, "$method($x $y)..@method(@arr)...$method(@method(arg))"),
+            (Rule::Range, "$($x $y)..@(@arr)...$(atom @method('litStr'))"),
         ];
 
         let mut errs = Vec::new();
@@ -147,7 +152,7 @@ mod tests {
             (Rule::StatementLet, "let s ++= \"@(ls -lah)\""),
             (Rule::StatementLet, "let s ::= 'prepend '"),
             (Rule::StatementLet, "let dx:[hmap[str]] = [ [a=\"a\" b=\"$b\"] [c=\"@c\" d='$d'] ]"),
-            (Rule::StatementLet, "let x  =        value")
+            (Rule::StatementLet, "let x  =        value"),
         ];
 
         let mut errs = Vec::new();
@@ -189,6 +194,7 @@ mod tests {
             (Rule::StatementLet, "let x ="),
             (Rule::StatementLet, "let x: = value"),
             (Rule::StatementLet, "let let:int = value"),
+            (Rule::StatementLet, "let $not_ident = value"),
         ];
 
         let mut errs = Vec::new();

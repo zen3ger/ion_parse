@@ -88,17 +88,16 @@ Literal = _{ LitFloat
     LitAnyArray   = { "[" ~ Literal* ~ "]" }
   LitMap = { "[" ~ LitMapPair+ ~ "]" }
     LitMapPair = ${ LitMapKey ~ "=" ~ LitMapValue }
-      LitMapKey   = { Expression }
+      LitMapKey   = { IndexedEval | !ArrEvalOp ~ Expression }
       LitMapValue = { Expression }
 
 // Range syntax
 RangeOp = _{ (RangeIn | RangeEx) }
   RangeIn = { ("..." | "..=") }
   RangeEx = { ".." }
-RangeVal  = _{ LitInt | LitChar | (Sign? ~ (Method | Eval | SubShell)) }
-RangeStep = ${ ".." ~ (LitInt | (Sign? ~ (Method | Eval | SubShell))) }
+RangeVal  = _{ LitInt | LitChar | (Sign? ~ (StrMethod | StrEval | IndexedEval | Shell | ReturnShell )) }
+RangeStep = ${ ".." ~ (LitInt | (Sign? ~ (StrMethod | StrEval | IndexedEval | Shell | ReturnShell ))) }
 Range = { RangeVal ~ (RangeStep ~ RangeOp | RangeOp) ~ RangeVal }
-
 
 // redirect operators
 // >
@@ -106,14 +105,16 @@ Range = { RangeVal ~ (RangeStep ~ RangeOp | RangeOp) ~ RangeVal }
 // |
 // &>
 
-SubShell = _{ Shell | ArrayShell }
-  Shell      = ${"$(" ~ (WHITESPACE | Expression)+ ~ ")"}
-  ArrayShell = ${"@(" ~ (WHITESPACE | Expression)+ ~ ")"}
+SubShell = _{ Shell | ArrayShell | ReturnShell }
+  Shell       = ${"$(" ~ (WHITESPACE | Expression)* ~ ")"}
+  ArrayShell  = ${"@(" ~ (WHITESPACE | Expression)* ~ ")"}
+  ReturnShell = ${"?(" ~ (WHITESPACE | Expression)* ~ ")"}
 
 // Variable syntax consist of variable name with optional ':' separated type
 // specifier, example would be 'varname:type'.
 
-Variable = _{ Ident ~ (":" ~ Type)? }
+Variable = @{ Ident ~ (":" ~ Type | Indexed )? }
+  Indexed = ${ "[" ~ !ArrEvalOp ~ (Range | LitMapKey) ~ "]" }
   Type = _{ Primitive | AnyArray | TypedArray | Map }
     Primitive = _{ Bool | Int | Float | Str }
       Bool  = { "bool" }
@@ -169,9 +170,10 @@ Atom = ${ ( !Keyword
 	  ~ !Comment
 	  ~ ANY)+ }
 
-Eval = _{ StrEval | ArrEval }
-  StrEval = ${ StrEvalOp ~ Ident }
-  ArrEval = ${ ArrEvalOp ~ Ident }
+Eval = _{ StrEval | IndexedEval | ArrEval }
+  StrEval     = ${ StrEvalOp ~ Ident }
+  ArrEval     = ${ ArrEvalOp ~ Ident }
+  IndexedEval = ${ ArrEval ~ Indexed }
 
 // XXX: Assuming methods have at least one argument
 Method = _{ StrMethod | ArrMethod }
@@ -179,11 +181,10 @@ Method = _{ StrMethod | ArrMethod }
   ArrMethod = ${ ArrEvalOp ~ Ident ~ "(" ~ MethodArgs ~ ")" }
     MethodArgs = _{ Expression ~ (WHITESPACE ~ Expression)* }
 
-Expression = _{ Literal
-	      | Atom
-	      | Method
+Expression = _{ Method
               | Eval
-	      | SubShell }
+	      | SubShell
+	      | Literal }
 
 StatementLet = { Let ~ Variables ~ AssignOp ~ Expression+ }
 
