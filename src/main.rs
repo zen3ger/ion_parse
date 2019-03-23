@@ -76,7 +76,9 @@ mod tests {
                 Err(err) => errs.push((index, input, err)),
                 Ok(passed) => {
                     let span = passed.clone().next().unwrap().as_span();
-                    if span.end() != input.len() {
+                    let (end, len) = (span.end(), input.len());
+                    if end != len {
+                        println!("end: {}; len:{};\n{}", end, len, passed);
                         let err = Error::new_from_span(
                             ErrorVariant::CustomError { message: "partial match".into() },
                             span
@@ -133,11 +135,88 @@ mod tests {
     }
 
     #[test]
-    fn should_pass() {
-        let v = vec![
+    fn assignment_pass() {
+        let tests = vec![
             // We cannot check if the assignment count or type is correct
             // just give the infered input to actuall assignment handler
             (Rule::StatementLet, "let x:int y:[[int]] = atom0 atom1"),
+            (Rule::StatementLet, "let x += 1"),
+            (Rule::StatementLet, "let x -= $y"),
+            (Rule::StatementLet, "let x *= $sum(@arr)"),
+            (Rule::StatementLet, "let x /= $(echo '10')"),
+            (Rule::StatementLet, "let s ++= \"@(ls -lah)\""),
+            (Rule::StatementLet, "let s ::= 'prepend '"),
+            (Rule::StatementLet, "let dx:[hmap[str]] = [ [a=\"a\" b=\"$b\"] [c=\"@c\" d='$d'] ]"),
+            (Rule::StatementLet, "let x  =        value")
+        ];
+
+        let mut errs = Vec::new();
+        for (index, (rule, input)) in tests.iter().enumerate() {
+            match pesto::Command::parse(*rule, &input) {
+                Err(err) => errs.push((index, input, err)),
+                Ok(passed) => {
+                    let span = passed.clone().next().unwrap().as_span();
+                    let (end, len) = (span.end(), input.len());
+                    if end != len {
+                        println!("end: {}; len:{};\n{}", end, len, passed);
+                        let err = Error::new_from_span(
+                            ErrorVariant::CustomError { message: "partial match".into() },
+                            span
+                        );
+                        // partial match, should be considered as an error
+                        errs.push((index, input, err));
+                    }
+                }
+            }
+            if let Err(err) = pesto::Command::parse(*rule, &input) {
+                errs.push((index, input, err));
+            }
+        }
+
+        if errs.len() > 0 {
+            for (index, input, err) in errs {
+                println!("[{}] {}", index, input);
+                println!("{}", err);
+            }
+            panic!();
+        }
+    }
+
+    #[test]
+    fn assignment_fail() {
+        let tests = vec![
+            (Rule::StatementLet, "let = value"),
+            (Rule::StatementLet, "let x ="),
+            (Rule::StatementLet, "let x: = value"),
+            (Rule::StatementLet, "let let:int = value"),
+        ];
+
+        let mut errs = Vec::new();
+        for (index, (rule, input)) in tests.iter().enumerate() {
+            if let Ok(passed) = pesto::Command::parse(*rule, &input) {
+                let span = passed.clone().next().unwrap().as_span();
+                let (end, len) = (span.end(), input.len());
+                if end == len {
+                    println!("end: {}; len: {};\n{}", end, len, passed);
+                    // Partial matches can happen, but they count as failure,
+                    // complete parsing catches it whit `~ EOI`
+                    errs.push((index, input, passed));
+                }
+            }
+        }
+
+        if errs.len() > 0 {
+            for (index, input, passed) in errs {
+                println!("[{}] {}", index, input);
+                println!("{}\n", passed);
+            }
+            panic!();
+        }
+    }
+
+//    #[test]
+//    fn should_pass() {
+//        let v = vec![
 //            (Rule::Main, "let x = 4"),
 //            (Rule::Main, "let x y = 4 5"),
 //            (Rule::Statement, "echo $x"),
@@ -167,22 +246,22 @@ mod tests {
 //            (Rule::Range, "10..-2..=0"),
 //            (Rule::Range, "$(ls -l)"),
 //            (Rule::Range, "0..$s"),
-        ];
+//       ];
 
-        let mut errs = Vec::new();
-        for (n, (rl, st)) in v.iter().enumerate() {
-            if let Err(e) = pesto::Command::parse(*rl, &st) {
-                errs.push((n, rl, st, e));
-            }
-        }
+//       let mut errs = Vec::new();
+//       for (n, (rl, st)) in v.iter().enumerate() {
+//           if let Err(e) = pesto::Command::parse(*rl, &st) {
+//               errs.push((n, rl, st, e));
+//           }
+//       }
 
-        if errs.len() > 0 {
-            for e in errs {
-                println!("{:?}\n", e);
-            }
-            panic!();
-        }
-    }
+//       if errs.len() > 0 {
+//           for e in errs {
+//               println!("{:?}\n", e);
+//           }
+//           panic!();
+//       }
+//   }
 //    #[test]
 //    fn should_fail() {
 //        let v = vec![

@@ -136,13 +136,15 @@ AssignOp = _{ Assign
 	    | DecAssign
 	    | MulAssign
 	    | DivAssign
-	    | ConcatAssing }
-  Assign       = { "=" }
-  IncAssign    = { "+=" }
-  DecAssign    = { "-=" }
-  MulAssign    = { "*=" }
-  DivAssign    = { "/=" }
-  ConcatAssing = { "++=" }
+	    | AppendAssign
+	    | PrependAssign}
+  Assign        = { "=" }
+  IncAssign     = { "+=" }
+  DecAssign     = { "-=" }
+  MulAssign     = { "*=" }
+  DivAssign     = { "/=" }
+  AppendAssign  = { "++=" }
+  PrependAssign = { "::=" }
 
 EvalOp = _{ ArrEvalOp | StrEvalOp }
   ArrEvalOp = _{ "@" }
@@ -164,6 +166,7 @@ Atom = ${ ( !Keyword
 	  ~ !Brace
 	  ~ !Bracket
 	  ~ !Sep
+	  ~ !Comment
 	  ~ ANY)+ }
 
 Eval = _{ StrEval | ArrEval }
@@ -184,8 +187,8 @@ Expression = _{ Literal
 
 StatementLet = { Let ~ Variables ~ AssignOp ~ Expression+ }
 
-Statements = _{ StatementLet }
-Expressions = _{ Expression* }
+Statements = _{ StatementLet ~ Comment? }
+Expressions = _{ Expression* ~ Comment? }
 
 Input = { Comment | Statements | Expressions }
 
