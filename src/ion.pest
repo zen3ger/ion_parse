@@ -1,10 +1,11 @@
-WHITESPACE = _{ " " | "\n" }
+WHITESPACE = _{ " " | "\t" }
 Char = _{ 'a'..'z' | 'A'..'Z' }
 Digit = _{ '0'..'9' }
 Escaped = { "\\" ~ ANY }
 
 // Variables can contain/start with '_' and/or ASCII characters
-Ident = ${ !Keyword ~ (Char | "_")+ ~ (Char | "_" | Digit)* }
+Ident = @{ Keyword ~ (Char | "_" | Digit)+
+         | !Keyword ~ (Char | "_")+ ~ (Char | "_" | Digit)* }
 
 // Line starting with '#' counts as comment until the end of the line
 Comment = _{ "#"+ ~ ANY* }
@@ -113,7 +114,7 @@ SubShell = _{ Shell | ArrayShell | ReturnShell }
 // Variable syntax consist of variable name with optional ':' separated type
 // specifier, example would be 'varname:type'.
 
-Variable = @{ Ident ~ (":" ~ Type | Indexed )? }
+Variable = @{ Ident ~ (":" ~ Type | Indexed+ )? }
   Indexed = ${ "[" ~ !ArrEvalOp ~ (Range | LitMapKey) ~ "]" }
   Type = _{ Primitive | AnyArray | TypedArray | Map }
     Primitive = _{ Bool | Int | Float | Str }
@@ -159,21 +160,15 @@ Parent = _{ "(" | ")" }
 Brace  = _{ "{" | "}" }
 Bracket = _{ "[" | "]" }
 
-Atom = ${ ( !Keyword
-          ~ !EvalOp
-	  ~ !WHITESPACE
-	  ~ !Quote
-	  ~ !Parent
-	  ~ !Brace
-	  ~ !Bracket
-	  ~ !Sep
-	  ~ !Comment
-	  ~ ANY)+ }
+AtomDontMatch = _{ WHITESPACE | Sep | EvalOp | SQuote | DQuote
+                 | "(" | ")" | "{" | "}" | "[" | "]" | "#" }
+Atom = @{ Keyword ~ (!AtomDontMatch ~ ANY)+
+        | !Keyword ~ (!AtomDontMatch ~ ANY)+ }
 
 Eval = _{ StrEval | IndexedEval | ArrEval }
   StrEval     = ${ StrEvalOp ~ Ident }
   ArrEval     = ${ ArrEvalOp ~ Ident }
-  IndexedEval = ${ ArrEval ~ Indexed }
+  IndexedEval = ${ ArrEval ~ Indexed+ }
 
 // XXX: Assuming methods have at least one argument
 Method = _{ StrMethod | ArrMethod }

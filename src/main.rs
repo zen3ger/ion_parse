@@ -153,6 +153,10 @@ mod tests {
             (Rule::StatementLet, "let s ::= 'prepend '"),
             (Rule::StatementLet, "let dx:[hmap[str]] = [ [a=\"a\" b=\"$b\"] [c=\"@c\" d='$d'] ]"),
             (Rule::StatementLet, "let x  =        value"),
+            (Rule::StatementLet, "let form = not_keyword"),
+            (Rule::StatementLet, "let arr[0] = 'indexed'"),
+            (Rule::StatementLet, "let arr[0][1][2] = 'nd-array'"),
+            (Rule::StatementLet, "let arr['map'] = 'hashmap'"),
         ];
 
         let mut errs = Vec::new();
@@ -195,6 +199,9 @@ mod tests {
             (Rule::StatementLet, "let x: = value"),
             (Rule::StatementLet, "let let:int = value"),
             (Rule::StatementLet, "let $not_ident = value"),
+            // If indexed then we cannot define the type, as the array is already defined
+            (Rule::StatementLet, "let arr[0]:int = value"),
+            (Rule::StatementLet, "let arr [0] = value"),
         ];
 
         let mut errs = Vec::new();
