@@ -28,6 +28,7 @@ Keyword = _{ End
   End      = { "end" }
   Let      = { "let" }
   Export   = { "export" }
+  Alias    = { "alias" }
   Match    = { "match" }
   Case     = { "case" }
   If       = { "if" }
@@ -82,37 +83,66 @@ Literal = _{ LitFloat
               | LitFloatArray
 	      | LitIntArray
 	      | LitAnyArray }
-    // XXX: not supported right now?
+    // XXX: Array from range is not supported ATM.
     LitRangeArray = { "[" ~ Range ~ "]" }
     LitFloatArray = { "[" ~ LitFloat+ ~ "]" }
     LitIntArray   = { "[" ~ LitInt+ ~ "]" }
     LitAnyArray   = { "[" ~ Literal* ~ "]" }
   LitMap = { "[" ~ LitMapPair+ ~ "]" }
     LitMapPair = ${ LitMapKey ~ "=" ~ LitMapValue }
-      LitMapKey   = { IndexedEval | !ArrEvalOp ~ Expression }
-      LitMapValue = { Expression }
+      LitMapKey   = { IndexedEval | !ArrEvalOp ~ Pipeline }
+      LitMapValue = { Pipeline }
 
 // Range syntax
 RangeOp = _{ (RangeIn | RangeEx) }
   RangeIn = { ("..." | "..=") }
   RangeEx = { ".." }
-RangeVal  = _{ LitInt | LitChar | (Sign? ~ (StrMethod | StrEval | IndexedEval | Shell | ReturnShell )) }
-RangeStep = ${ ".." ~ (LitInt | (Sign? ~ (StrMethod | StrEval | IndexedEval | Shell | ReturnShell ))) }
+RangeVal  = _{ LitInt
+             | LitChar
+	     | (Sign? ~ ( StrMethod
+	                | StrEval
+			| IndexedEval
+			| Shell
+			| ReturnShell )) }
+
+RangeStep = ${ ".." ~ (LitInt
+                      | (Sign? ~ ( StrMethod
+		                 | StrEval
+				 | IndexedEval
+				 | Shell
+				 | ReturnShell ))) }
+
 Range = { RangeVal ~ (RangeStep ~ RangeOp | RangeOp) ~ RangeVal }
 
-// redirect operators
-// >
-// <
-// |
-// &>
+// Redirection and pipe operators
+PipelineOp = _{ WHITESPACE* ~
+              ( PipeStdOut
+              | PipeStdErr
+	      | PipeBoth
+	      | RedirStdOut
+	      | RedirStdOutAppend
+	      | RedirStdErr
+	      | RedirBoth ) ~ WHITESPACE* }
+  PipeStdOut        = ${"|"}
+  PipeStdErr        = ${"^|"}
+  PipeBoth          = ${"&|"}
+  RedirStdOut       = ${">"}
+  RedirStdOutAppend = ${">>"}
+  RedirStdErr       = ${"^>"}
+  RedirBoth         = ${"&>"}
+
+Pipeline = { Expression+ ~ (PipelineOp ~ Expression+)* }
 
 SubShell = _{ Shell | ArrayShell | ReturnShell }
-  Shell       = ${"$(" ~ (WHITESPACE | Expression)* ~ ")"}
-  ArrayShell  = ${"@(" ~ (WHITESPACE | Expression)* ~ ")"}
-  ReturnShell = ${"?(" ~ (WHITESPACE | Expression)* ~ ")"}
+  Shell       = ${"$(" ~ (WHITESPACE | Pipeline)* ~ ")"}
+  ArrayShell  = ${"@(" ~ (WHITESPACE | Pipeline)* ~ ")"}
+  // XXX: Directly getting the return code from subshell is not supported ATM.
+  ReturnShell = ${"?(" ~ (WHITESPACE | Pipeline)* ~ ")"}
 
 // Variable syntax consist of variable name with optional ':' separated type
 // specifier, example would be 'varname:type'.
+// A variable can also be indexed, when a value is re-assigned for an
+// array or map, but in thet case if cannot be typed.
 
 Variable = @{ Ident ~ (":" ~ Type | Indexed+ )? }
   Indexed = ${ "[" ~ !ArrEvalOp ~ (Range | LitMapKey) ~ "]" }
@@ -160,10 +190,11 @@ Parent = _{ "(" | ")" }
 Brace  = _{ "{" | "}" }
 Bracket = _{ "[" | "]" }
 
-AtomDontMatch = _{ WHITESPACE | Sep | EvalOp | SQuote | DQuote
-                 | "(" | ")" | "{" | "}" | "[" | "]" | "#" }
-Atom = @{ Keyword ~ (!AtomDontMatch ~ ANY)+
-        | !Keyword ~ (!AtomDontMatch ~ ANY)+ }
+AtomShouldntMatch = _{ WHITESPACE | Sep | EvalOp | SQuote | DQuote | PipelineOp
+                     | "(" | ")" | "{" | "}" | "[" | "]" | "#" }
+
+Atom = @{ Keyword ~ (!AtomShouldntMatch ~ ANY)+
+        | !Keyword ~ (!AtomShouldntMatch ~ ANY)+ }
 
 Eval = _{ StrEval | IndexedEval | ArrEval }
   StrEval     = ${ StrEvalOp ~ Ident }
@@ -184,8 +215,8 @@ Expression = _{ Method
 StatementLet = { Let ~ Variables ~ AssignOp ~ Expression+ }
 
 Statements = _{ StatementLet ~ Comment? }
-Expressions = _{ Expression* ~ Comment? }
+Pipelines = _{ Pipeline ~ Comment? }
 
-Input = { Comment | Statements | Expressions }
+Input = { Comment | Statements | Pipelines }
 
 Main = { SOI ~ Input ~ Sep? ~ EOI }
