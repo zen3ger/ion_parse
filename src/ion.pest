@@ -190,7 +190,9 @@ Parent = _{ "(" | ")" }
 Brace  = _{ "{" | "}" }
 Bracket = _{ "[" | "]" }
 
-AtomShouldntMatch = _{ WHITESPACE | Sep | EvalOp | SQuote | DQuote | PipelineOp
+BgOp = ${ "&" }
+
+AtomShouldntMatch = _{ WHITESPACE | Sep | EvalOp | SQuote | DQuote | PipelineOp | BgOp
                      | "(" | ")" | "{" | "}" | "[" | "]" | "#" }
 
 Atom = @{ Keyword ~ (!AtomShouldntMatch ~ ANY)+
@@ -217,6 +219,6 @@ StatementLet = { Let ~ Variables ~ AssignOp ~ Expression+ }
 Statements = _{ StatementLet ~ Comment? }
 Pipelines = _{ Pipeline ~ Comment? }
 
-Input = { Comment | Statements | Pipelines }
+Input = { Comment | Statements | Pipelines ~ BgOp? }
 
 Main = { SOI ~ Input ~ Sep? ~ EOI }

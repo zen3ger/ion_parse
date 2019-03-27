@@ -44,6 +44,75 @@ mod tests {
     use pest::error::{Error, ErrorVariant};
 
     #[test]
+    fn pipeline_pass() {
+        let tests = vec![
+            (Rule::Pipeline, "echo a | sed s/a/b/ "),
+            (Rule::Pipeline, "make -j32 ^| grep 'ERROR' > make.log"),
+            (Rule::Pipeline, "which dog ^> grep \"@arr\" >> whatev"),
+            (Rule::Pipeline, "make -j32 &| grep 'ERROR' &> tee make.log"),
+            (Rule::Pipeline, "echo @(mecho -j32 &| grep 'ERROR') &> tee make.log"),
+        ];
+
+        let mut errs = Vec::new();
+        for (index, (rule, input)) in tests.iter().enumerate() {
+            match pesto::Command::parse(*rule, &input) {
+                Err(err) => errs.push((index, input, err)),
+                Ok(passed) => {
+                    let span = passed.clone().next().unwrap().as_span();
+                    let (end, len) = (span.end(), input.len());
+                    if end != len {
+                        println!("end: {}; len:{};\n{}", end, len, passed);
+                        let err = Error::new_from_span(
+                            ErrorVariant::CustomError { message: "partial match".into() },
+                            span
+                        );
+                        // partial match, should be considered as an error
+                        errs.push((index, input, err));
+                    }
+                }
+            }
+            if let Err(err) = pesto::Command::parse(*rule, &input) {
+                errs.push((index, input, err));
+            }
+        }
+    }
+
+    #[test]
+    fn pipeline_fail() {
+        // XXX: what could be tested here?
+        let tests = vec![
+            (Rule::Pipeline, "which dog >"),
+            (Rule::Pipeline, "which dog &| >"),
+            (Rule::Pipeline, "which dog &&| tee"),
+            (Rule::Pipeline, "which dog ^ >"),
+            (Rule::Pipeline, "which dog & >"),
+            (Rule::Pipeline, " > grep 'WUT'"),
+        ];
+
+        let mut errs = Vec::new();
+        for (index, (rule, input)) in tests.iter().enumerate() {
+            if let Ok(passed) = pesto::Command::parse(*rule, &input) {
+                let span = passed.clone().next().unwrap().as_span();
+                let (end, len) = (span.end(), input.len());
+                if end == len {
+                    println!("end: {}; len: {};\n{}", end, len, passed);
+                    // Partial matches can happen, but they count as failure,
+                    // complete parsing catches it whit `~ EOI`
+                    errs.push((index, input, passed));
+                }
+            }
+        }
+
+        if errs.len() > 0 {
+            for (index, input, passed) in errs {
+                println!("[{}] {}", index, input);
+                println!("{}\n", passed);
+            }
+            panic!();
+        }
+    }
+
+    #[test]
     fn range_pass() {
         // Ranges have a fix start and end value and an optional step.
         // The step can be an integer or anything that expands to a value
